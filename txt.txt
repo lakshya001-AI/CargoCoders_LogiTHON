@@ -1,0 +1,395 @@
+import React, { useEffect, useState } from "react";
+import {
+  GoogleMap,
+  LoadScript,
+  Polyline,
+  Marker,
+} from "@react-google-maps/api";
+
+const GOOGLE_MAPS_API_KEY = "AIzaSyAmyeWi4SPcXM7dkR1hduoIqL5uyMXtqUk";
+
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const poly = [];
+  let index = 0,
+    lat = 0,
+    lng = 0;
+  while (index < encoded.length) {
+    let b,
+      shift = 0,
+      result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+    poly.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return poly;
+}
+
+function calculateMapCenter(routes) {
+  // Find all coordinates from all routes
+  let allCoords = [];
+
+  Object.values(routes).forEach((route) => {
+    if (route.encodedPolyline) {
+      allCoords = [...allCoords, ...decodePolyline(route.encodedPolyline)];
+    } else if (route.coordinates) {
+      allCoords = [...allCoords, ...route.coordinates];
+    }
+  });
+
+  if (allCoords.length === 0) return { lat: 0, lng: 0 };
+
+  // Calculate the center
+  const sumLat = allCoords.reduce((sum, coord) => sum + coord.lat, 0);
+  const sumLng = allCoords.reduce((sum, coord) => sum + coord.lng, 0);
+
+  return {
+    lat: sumLat / allCoords.length,
+    lng: sumLng / allCoords.length,
+  };
+}
+
+function App() {
+  const [routes, setRoutes] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [mapCenter, setMapCenter] = useState({ lat: 0, lng: 0 });
+  const [mapZoom, setMapZoom] = useState(2);
+
+  useEffect(() => {
+    const routesData = [
+      { id: "1", waypoints: ["tokyo", "singapore"], state: "air" },
+      { id: "2", waypoints: ["singapore", "jakarta"], state: "sea" },
+      { id: "3", waypoints: ["jakarta", "perth"], state: "sea" },
+      { id: "4", waypoints: ["perth", "adelaide"], state: "land" },
+      { id: "5", waypoints: ["adelaide", "melbourne"], state: "land" },
+      { id: "6", waypoints: ["melbourne", "cape town"], state: "sea" },
+      { id: "7", waypoints: ["cape town", "nairobi"], state: "air" },
+      { id: "8", waypoints: ["nairobi", "addis ababa"], state: "land" },
+      { id: "9", waypoints: ["addis ababa", "riyadh"], state: "air" },
+      { id: "10", waypoints: ["riyadh", "tehran"], state: "land" },
+    ];
+
+    fetch("http://localhost:5000/api/routes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(routesData),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        setRoutes(data);
+        // Calculate map center based on all routes
+        const center = calculateMapCenter(data);
+        setMapCenter(center);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching routes:", error);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return <div>Loading routes data...</div>;
+  }
+
+  return (
+    <div className="app-container">
+      <h1>Route Direction Finder</h1>
+      <div className="route-types">
+        <div>
+          <span className="color-box land"></span> Land Routes
+        </div>
+        <div>
+          <span className="color-box sea"></span> Sea Routes
+        </div>
+        <div>
+          <span className="color-box air"></span> Air Routes
+        </div>
+      </div>
+      <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+        <GoogleMap
+          mapContainerStyle={{ width: "100%", height: "600px" }}
+          center={mapCenter}
+          zoom={mapZoom}
+        >
+          {Object.entries(routes).map(([id, route]) => {
+            if (route.state === "land") {
+              return (
+                <Polyline
+                  key={id}
+                  path={decodePolyline(route.encodedPolyline)}
+                  options={{ strokeColor: "green", strokeWeight: 5 }}
+                />
+              );
+            } else if (route.state === "sea") {
+              return (
+                <Polyline
+                  key={id}
+                  path={route.coordinates}
+                  options={{
+                    strokeColor: "blue",
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8,
+                    geodesic: true,
+                  }}
+                />
+              );
+            } else if (route.state === "air") {
+              return (
+                <Polyline
+                  key={id}
+                  path={route.coordinates}
+                  options={{
+                    strokeColor: "red",
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8,
+                    geodesic: true,
+                  }}
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Add markers for all waypoints */}
+          {Object.entries(routes).flatMap(([id, route]) => {
+            // For land routes (using decoded polyline)
+            if (route.encodedPolyline) {
+              const path = decodePolyline(route.encodedPolyline);
+              if (path.length > 0) {
+                return [
+                  <Marker
+                    key={`${id}-start`}
+                    position={path[0]}
+                    label="Start"
+                  />,
+                  <Marker
+                    key={`${id}-end`}
+                    position={path[path.length - 1]}
+                    label="End"
+                  />,
+                ];
+              }
+            }
+            // For sea and air routes
+            else if (route.coordinates && route.coordinates.length > 0) {
+              return [
+                <Marker
+                  key={`${id}-start`}
+                  position={route.coordinates[0]}
+                  label="Start"
+                />,
+                <Marker
+                  key={`${id}-end`}
+                  position={route.coordinates[route.coordinates.length - 1]}
+                  label="End"
+                />,
+              ];
+            }
+            return [];
+          })}
+        </GoogleMap>
+      </LoadScript>
+
+      <style jsx>{`
+        .app-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        h1 {
+          text-align: center;
+          margin-bottom: 20px;
+        }
+        .route-types {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 15px;
+        }
+        .route-types div {
+          margin: 0 15px;
+          display: flex;
+          align-items: center;
+        }
+        .color-box {
+          width: 20px;
+          height: 10px;
+          display: inline-block;
+          margin-right: 5px;
+        }
+        .land {
+          background-color: green;
+        }
+        .sea {
+          background-color: blue;
+        }
+        .air {
+          background-color: red;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default App;
+
+
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
+require("dotenv").config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+const GOOGLE_MAPS_API_KEY = "AIzaSyAmyeWi4SPcXM7dkR1hduoIqL5uyMXtqUk";
+
+async function geocodeAddress(address) {
+  try {
+    const response = await axios.get(
+      "https://maps.googleapis.com/maps/api/geocode/json",
+      {
+        params: {
+          address: address,
+          key: GOOGLE_MAPS_API_KEY,
+        },
+      }
+    );
+
+    if (response.data.status === "OK" && response.data.results.length > 0) {
+      const location = response.data.results[0].geometry.location;
+      return { lat: location.lat, lng: location.lng };
+    } else {
+      throw new Error(`Geocoding failed for address: ${address}`);
+    }
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    throw error;
+  }
+}
+
+async function getDirections(waypoints) {
+  try {
+    const waypointsLatLng = await Promise.all(waypoints.map(geocodeAddress));
+
+    const routesApiUrl =
+      "https://routes.googleapis.com/directions/v2:computeRoutes";
+    const requestData = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: waypointsLatLng[0].lat,
+            longitude: waypointsLatLng[0].lng,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: waypointsLatLng[waypointsLatLng.length - 1].lat,
+            longitude: waypointsLatLng[waypointsLatLng.length - 1].lng,
+          },
+        },
+      },
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_AWARE",
+      computeAlternativeRoutes: false,
+      routeModifiers: {
+        avoidTolls: false,
+        avoidHighways: false,
+        avoidFerries: false,
+      },
+      languageCode: "en-US",
+      units: "IMPERIAL",
+    };
+
+    // Add intermediate waypoints if there are any
+    if (waypointsLatLng.length > 2) {
+      requestData.intermediates = waypointsLatLng.slice(1, -1).map((point) => ({
+        location: {
+          latLng: {
+            latitude: point.lat,
+            longitude: point.lng,
+          },
+        },
+      }));
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+      "X-Goog-FieldMask": "routes.polyline.encodedPolyline",
+    };
+
+    const response = await axios.post(routesApiUrl, requestData, { headers });
+
+    if (
+      !response.data ||
+      !response.data.routes ||
+      response.data.routes.length === 0
+    ) {
+      throw new Error("No routes found");
+    }
+
+    return response.data.routes[0].polyline.encodedPolyline;
+  } catch (error) {
+    console.error("Error getting directions:", error);
+    throw error;
+  }
+}
+
+app.post("/api/routes", async (req, res) => {
+  try {
+    const routesData = req.body;
+    const responseData = {};
+
+    for (const route of routesData) {
+      try {
+        if (route.state === "land") {
+          const encodedPolyline = await getDirections(route.waypoints);
+          responseData[route.id] = {
+            encodedPolyline,
+            state: route.state,
+          };
+        } else if (route.state === "sea" || route.state === "air") {
+          const coordinates = await Promise.all(
+            route.waypoints.map(geocodeAddress)
+          );
+          responseData[route.id] = { coordinates, state: route.state };
+        }
+      } catch (routeError) {
+        console.error(`Error processing route ${route.id}:`, routeError);
+        responseData[route.id] = {
+          error: `Failed to process route: ${routeError.message}`,
+          state: route.state,
+        };
+      }
+    }
+
+    res.json(responseData);
+  } catch (error) {
+    console.error("Error processing routes:", error);
+    res.status(500).json({ error: "Failed to process routes" });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
