@@ -55,17 +55,23 @@ Movex simplifies cargo management with cutting-edge AI technologies, making logi
 3. **Why choose us ?:**
    ![T](https://i.imgur.com/kTqrOpk.png)
 
-4. **Domestic Route:**
+4. **Objective of finding Domestic Route:**
    ![Domestic Route](https://i.imgur.com/Mq9dBkX.png)
 
-5. **Loan Approval Page:**
-   ![Currencies Detail Page](https://i.imgur.com/LvAG4Fx.jpeg)
+5. **Finding Domestic Route:**
+   ![C](https://i.imgur.com/Y5ZUrtP.png)
 
-6. **Personalized Financial Advice Page:**
-   ![Favorite Currency Page](https://i.imgur.com/A1vWeEy.jpeg)
+6. **Result of Domestic Route:**
+   ![F](https://i.imgur.com/ybcaA6R.png)
 
-7. **Profile Page:**
-   ![Currency Converter Page](https://i.imgur.com/VCsJH0v.jpeg)
+7. **Objective of finding the International Route:**
+   ![I](https://i.imgur.com/cnpec8u.png)
+
+8. **Compliance Check before finding the International Route:**
+   ![I](https://i.imgur.com/28BTnGF.png)
+
+9. **Findng the International Route:**
+   ![I](https://i.imgur.com/48SaDmK.png)
    
    
 
